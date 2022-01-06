@@ -5,6 +5,7 @@ require('dotenv').config()
 const port = process.env.PORT ||4000;
 const { MongoClient } = require('mongodb');
 const ObjectId=require('mongodb').ObjectId;
+const stripe= require('stripe')(process.env.STRIPE_KEY)
 
 app.use(cors())
 app.use(express.json())
@@ -73,6 +74,20 @@ app.post('/orders', async(req,res)=>{
     res.send(result)
 })
 
+// update my order
+app.put('/orders/:id', async(req, res)=>{
+  const id= req.params.id;
+  const payment= req.body;
+  const filter= {_id: ObjectId(id)};
+  const updateDoc={
+    $set:{
+      payment: payment
+    }
+  }
+  const result= await ordersCollection.updateOne(filter, updateDoc);
+  res.send(result);
+})
+
 // get All orders
 app.get('/allOrders', async(req,res)=>{
   const cursor=await ordersCollection.find({}).toArray();
@@ -86,6 +101,14 @@ app.get('/myOrders/:email', async(req,res)=>{
   const cursor={email:email}
   const result= await ordersCollection.find(cursor).toArray();
   // console.log(result);
+  res.send(result);
+})
+
+//get payment id
+app.get('/payment/:id', async(req,res)=>{
+  const paymentId= req.params.id;
+  const query= {_id:ObjectId(paymentId)};
+  const result= await ordersCollection.findOne(query);
   res.send(result);
 })
 
@@ -133,6 +156,7 @@ app.post('/addUserInfo', async (req, res) => {
 // make addmin
 app.put('/addAdmin', async (req, res) => {
   const user = req.body;
+  console.log('put', req.headers);
   const filter = { email: user.email };
   const updateDoc = { $set: { role: 'admin' } };
   const doc = await userCollection.updateOne(filter, updateDoc)
@@ -143,17 +167,41 @@ app.put('/addAdmin', async (req, res) => {
 })
 
 ///check admin 
-app.get('/users/:email', async(req,res)=>{
-  const email= req.params.email;
-  const  query= {email: email};
-  const user= await userCollection.findOne(query);
-  let isAdmin= false;
-  if(user?.role){
-    isAdmin=true;
-  }
-// console.log(isAdimn);
-  res.send({admin: isAdmin})
+// app.get('/users/:email', async(req,res)=>{
+//   const email= req.params.email;
+//   const  query= {email: email};
+//   const user= await userCollection.findOne(query);
+//   let isAdmin= false;
+//   if(user?.role){
+//     isAdmin=true;
+//   }
+// // console.log(isAdimn);
+//   res.send({admin: isAdmin})
+// })
+
+app.get("/checkAdmin/:email", async (req, res) => {
+  const email = req.params.email;
+  const query = { email: email };
+  const result = await userCollection.findOne(query);
+  res.send(result);
+});
+
+//payment stripe
+app.post('/create-payment-intent', async(req,res)=>{
+  const paymentInfo= req.body;
+  const amount = paymentInfo.price * 100;
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amount,
+    currency: "usd",
+   payment_method_types: ['card']
+  });
+res.send({
+  clientSecret: paymentIntent.client_secret,
+}  )
+
 })
+
+
 
   } finally {
     // await client.close();
